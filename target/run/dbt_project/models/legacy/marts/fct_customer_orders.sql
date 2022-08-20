@@ -1,4 +1,8 @@
-with 
+
+  create or replace  view ANALYTICS.dbt_mpassini_project.fct_customer_orders
+  
+   as (
+    with 
     paid_orders as (
         select orders.id as order_id,
             orders.user_id as customer_id,
@@ -8,17 +12,17 @@ with
             p.payment_finalized_date,
             c.first_name as customer_first_name,
             c.last_name as customer_last_name
-        from {{ source('jaffle_shop', 'orders') }} as orders
+        from analytics.dbt_mpassini_project.orders as orders
         left join (
             select 
                 orderid as order_id,
                 max(created) as payment_finalized_date,
                 sum(amount) / 100.0 as total_amount_paid
-            from {{ source('stripe', 'payments') }} as payments
+            from analytics.dbt_mpassini_project.payments as payments
             where status <> 'fail'
             group by 1
         ) p on orders.id = p.order_id
-        left join {{ source('jaffle_shop', 'customers') }} as c on orders.user_id = c.id ),
+        left join analytics.dbt_mpassini_project.customers as c on orders.user_id = c.id ),
 
     customer_orders as (
         select 
@@ -26,8 +30,8 @@ with
             , min(order_date) as first_order_date
             , max(order_date) as most_recent_order_date
             , count(orders.id) as number_of_orders
-        from {{ source('jaffle_shop', 'customers') }}  c 
-        left join {{ source('jaffle_shop', 'orders') }}  as orders on orders.user_id = c.id 
+        from analytics.dbt_mpassini_project.customers  c 
+        left join analytics.dbt_mpassini_project.orders  as orders on orders.user_id = c.id 
         group by 1
     )         
 
@@ -53,3 +57,4 @@ with
         order by p.order_id
     ) x on x.order_id = p.order_id
     order by order_id
+  );

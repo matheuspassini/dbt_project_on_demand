@@ -6,4 +6,10 @@ sources:
       schema: dbt_mpassini_project
       tables: 
         - name: customers
+          tests:
+            - unique
+            - not_null
         - name: orders
+          tests:
+            - unique
+            - not_null

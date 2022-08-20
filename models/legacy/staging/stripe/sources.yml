@@ -6,3 +6,6 @@ sources:
       schema: dbt_mpassini_project
       tables: 
         - name: payments
+          tests:
+            - unique
+            - not_null

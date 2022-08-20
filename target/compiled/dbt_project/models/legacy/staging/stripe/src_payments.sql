@@ -1,8 +1,8 @@
 with 
 
-base_payments as(
+payments as(
 
     select * from analytics.dbt_mpassini_project.payments
 )
 
-select * from base_payments
+select * from payments
