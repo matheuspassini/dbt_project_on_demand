@@ -1,8 +1,9 @@
 with 
 
-payments as(
+payments as (
 
-    select * from {{ source('stripe', 'payments') }}
+  select * from {{ source('stripe', 'payments') }}
+
 )
 
 select * from payments
