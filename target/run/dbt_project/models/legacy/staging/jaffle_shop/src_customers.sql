@@ -4,9 +4,10 @@
    as (
     with 
 
-customers as(
+customers as (
 
-    select * from analytics.dbt_mpassini_project.customers
+  select * from analytics.dbt_mpassini_project.customers
+
 )
 
 select * from customers

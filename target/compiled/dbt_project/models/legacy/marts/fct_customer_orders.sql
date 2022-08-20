@@ -1,96 +1,105 @@
-with 
-    paid_orders as (
+with
 
-        select 
+-- Import CTEs
 
-            orders.id as order_id,
+customers as (
 
-            orders.user_id as customer_id,
+  select * from ANALYTICS.dbt_mpassini_project.stg_jaffle_shop__customers
 
-            orders.order_date as order_placed_at,
+),
 
-            orders.status as order_status,
+orders as (
 
-            p.total_amount_paid,
+  select * from ANALYTICS.dbt_mpassini_project.stg_jaffle_shop__orders
 
-            p.payment_finalized_date,
+),
 
-            c.first_name as customer_first_name,
+payments as (
 
-            c.last_name as customer_last_name
+  select * from ANALYTICS.dbt_mpassini_project.stg_stripe__payments
 
-        from analytics.dbt_mpassini_project.orders as orders
+),
 
-        left join (
+-- Logical CTEs
 
-            select 
-                orderid as order_id,
+completed_payments as (
 
-                max(created) as payment_finalized_date,
+  select 
+    order_id,
+    max(payment_created_at) as payment_finalized_date,
+    sum(payment_amount) as total_amount_paid
+  from payments
+  where payment_status <> 'fail'
+  group by 1
 
-                sum(amount) / 100.0 as total_amount_paid
+),
 
-            from analytics.dbt_mpassini_project.payments as payments
-            where status <> 'fail'
-            group by 1
+paid_orders as (
 
-        ) p on orders.id = p.order_id
+  select 
+    orders.order_id,
+    orders.customer_id,
+    orders.order_placed_at,
+    orders.order_status,
 
-    
-        left join analytics.dbt_mpassini_project.customers as c on orders.user_id = c.id ),
+    completed_payments.total_amount_paid,
+    completed_payments.payment_finalized_date,
 
-    customer_orders as (
+    customers.customer_first_name,
+    customers.customer_last_name
+  from orders
+  left join completed_payments on orders.order_id = completed_payments.order_id
+  left join customers on orders.customer_id = customers.customer_id
 
-        select 
-            c.id as customer_id,
+),
 
-            min(order_date) as first_order_date,
+-- Final CTE
 
-            max(order_date) as most_recent_order_date,
+final as (
 
-            count(orders.id) as number_of_orders
+  select
+    order_id,
+    customer_id,
+    order_placed_at,
+    order_status,
+    total_amount_paid,
+    payment_finalized_date,
+    customer_first_name,
+    customer_last_name,
 
-        from analytics.dbt_mpassini_project.customers  c 
+    -- sales transaction sequence
+    row_number() over (order by order_id) as transaction_seq,
 
-        left join analytics.dbt_mpassini_project.orders  as orders on orders.user_id = c.id 
-        group by 1
-    )         
+    -- customer sales sequence
+    row_number() over (partition by customer_id order by order_id) as customer_sales_seq,
 
-    select
+    -- new vs returning customer
+    case  
+      when (
+      rank() over (
+      partition by customer_id
+      order by order_placed_at, order_id
+      ) = 1
+    ) then 'new'
+    else 'return' end as nvsr,
 
-        p.*,
+    -- customer lifetime value
+    sum(total_amount_paid) over (
+      partition by customer_id
+      order by order_placed_at
+      ) as customer_lifetime_value,
 
-        row_number() over (order by p.order_id) as transaction_seq,
+    -- first day of sale
+    first_value(order_placed_at) over (
+      partition by customer_id
+      order by order_placed_at
+      ) as fdos
 
-        row_number() over (partition by customer_id order by p.order_id) as customer_sales_seq,
+    from paid_orders
+		
+)
 
-        case 
-            when c.first_order_date = p.order_placed_at
-            then 'new'
-            else 'return' 
-        end as nvsr,
+-- Simple Select Statement
 
-        x.clv_bad as customer_lifetime_value,
-
-        c.first_order_date as fdos
-
-    from paid_orders p
-
-    left join customer_orders as c using (customer_id)
-
-    left outer join 
-    (
-        select
-            p.order_id,
-
-            sum(t2.total_amount_paid) as clv_bad
-
-        from paid_orders p
-
-        left join paid_orders t2 on p.customer_id = t2.customer_id and p.order_id >= t2.order_id
-
-        group by 1
-        order by p.order_id
-        
-    ) x on x.order_id = p.order_id
-    order by order_id
+select * from final
+order by order_id
